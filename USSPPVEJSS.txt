@@ -1,0 +1,9 @@
+USSPPVEJSS
+Ultra Simple Single Player Person Versus Enemy Java Script Shooter
+
+1. add intro and death screen and score and damage and ammo and coins rendering/counters/trackers
+2. add the environment(a simple box like arena) and player movement and collissions
+3. add enemys and make them spawn in waves and give everyone guns and make them function
+4. add ai(ish) to the enemys to make them move and shoot
+5. add simple player powerups(obtained from the drops of the enemys)
+6. add simple store in between the waves to obtain better guns from the coins from the enemys
