@@ -3,6 +3,7 @@ const h = 720;
 
 let gameFont;
 let ammo_img;
+let ak_model;
 
 let hp = null;
 let ammo_mag = 30;
@@ -27,11 +28,14 @@ function setup(){
   ammo_img.filter(INVERT);
 
   cam_color = color(255, 255, 255);
+  ak47 = new Weapon(ak_model, 120, 120, 30, 30, 30, true);
+  enemy = new Enemy(100, 435, 0, 0, 0, ak47, color(100, 200, 255), 15, 100)
 }
 
 function preload(){
   ammo_img = loadImage("ammo.png");
   gameFont = loadFont('EvilEmpire-lx5R0.ttf');
+  ak_model = loadModel('ak47.stl');
 }
 
 function draw(){
@@ -72,6 +76,7 @@ function keyPressed(){
 function mousePressed() {
   // hide the cursor
   requestPointerLock();
+  ak47.shoot_scan(player_angle_x, player_angle_y, [player_x, player_y, player_z], [enemy])
 }
 
 // handle_input activates while it's pressed, until it isn't anymore
@@ -111,7 +116,7 @@ function handle_input(){
   } else if(player_z < -490){
     player_z = -490;
   }
-  console.log(player_x, player_y, player_z);
+  // console.log(player_x, player_y, player_z);
 }
 
 function draw_start_screen(){
@@ -242,6 +247,26 @@ function draw_3d(){
   plane(1000, 1000);
   pop();
 
+  ak47.draw([player_x, player_y, player_z], player_angle_x);
+  enemy.draw();
+
+  /*
+  push()
+  // translate(player_x+15*sin(player_angle_x), player_y, player_z+15*cos(player_angle_x));
+  let forwardDist = 15; // How far in front
+  let sideDist = 20;    // How far to the side (e.g., right hand)
+  let posX = player_x + forwardDist * cos(player_angle_x) + sideDist * sin(player_angle_x);
+  let posZ = player_z + forwardDist * sin(player_angle_x) - sideDist * cos(player_angle_x);
+  translate(posX, player_y, posZ);
+  rotateY(-HALF_PI - player_angle_x)
+  scale(1, -1, 1);
+  specularMaterial(160, 160, 160);
+  // normalMaterial();
+  shininess(50);
+  model(ak_model);
+  pop();
+  */
+
   // boxes on the floor(for if the room starts to feel trippy)
   /*
   fill(200, 50, 50);
@@ -257,4 +282,131 @@ function draw_3d(){
     }
   }
   */
+}
+
+
+class Weapon{
+  constructor(model, max_ammo, current_ammo, current_mag_ammo, max_mag_ammo, base_damage, bullet_kill_one){
+    this.model = model;
+    // max and current ammo is what is in your backpack and the mag, is what is in your gun
+    this.max_ammo = max_ammo;
+    this.current_ammo = current_ammo;
+    this.current_mag_ammo = current_mag_ammo;
+    this.max_mag_ammo = max_mag_ammo
+    this.base_damage = base_damage
+    this.bullet_kill_one = bullet_kill_one
+  }
+
+  draw(parent_coords, rotate_x, forward_dist=15, side_dist=20, height_offset=0){
+    // Only draw if the 3D model has finished loading
+    if (!this.model) return;
+    push();
+    // translate(player_x+15*sin(player_angle_x), player_y, player_z+15*cos(player_angle_x));
+    // position the gun(so it isn't in your face, when you shoot)
+    // let forward_dist = 15;
+    // let side_dist = 20;
+    let [x, y, z] = parent_coords;
+    let pos_x = x + forward_dist * cos(rotate_x) + side_dist * sin(rotate_x);
+    let pos_z = z + forward_dist * sin(rotate_x) - side_dist * cos(rotate_x);
+    translate(pos_x, y+height_offset, pos_z);
+    rotateY(-HALF_PI - rotate_x)
+    scale(1, -1, 1);
+    specularMaterial(160, 160, 160);
+    // normalMaterial();
+    shininess(50);
+    model(this.model);
+    pop();
+  }
+
+  // this uses hitscan, but since you can't jump, it's simpler
+  shoot_scan(shootangle_x, shootangle_y, bullet_origin, collide_check_list){
+    this.current_mag_ammo--
+    // console.log("shot?")
+    // vector of the direction of the shot
+    let dx = sin(shootangle_x);
+    let dz = -cos(shootangle_x);
+    let a = -dz;
+    let b = dx;
+    let c = (-dz * bullet_origin[0]) + (dx * bullet_origin[2]);
+
+    // make sure only one gets hit if bullet_kill_one == True
+    let closest_hit = null;
+    let min_distance = Infinity;
+
+    for(let entity of collide_check_list){
+      // console.log("s2")
+      // vector of the direction of the entity
+      let vx = entity.x - bullet_origin[0];
+      let vz = entity.z - bullet_origin[2];
+      
+      // use the dot product of the 2 vectors to see if it is behind(needs ignoring) or front(damage, if close enough)
+      let dot_product = (vx * dx) + (vz * dz);
+      // the dot product is the (in this case) horizontal distance from the player to the hit
+      let hit_y = bullet_origin[1] + (dot_product * tan(shootangle_y));
+      // console.log(`dx = ${dx}, vx = ${vx}`)
+      // console.log(`entity.x = ${entity.x}, bullet origin_x = ${bullet_origin.x}`)
+      // console.log(`dot_product = ${dot_product}`)
+
+      if(dot_product > 0){
+        let dist_to_line = distance_point_line(a, b, c, entity.x, entity.z);
+        // console.log(`dist_to_line = ${dist_to_line}`)
+        if(dist_to_line < entity.body_radius && hit_y <= 500 && hit_y >= entity.y - entity.body_radius){
+          if(!this.bullet_kill_one){
+            entity.hit(this.base_damage);
+          } else{
+            if(dot_product < min_distance){
+              min_distance = dot_product;
+              closest_hit = entity;
+            }
+          }
+        }
+      }
+    }
+    if(this.bullet_kill_one && closest_hit){
+      closest_hit.hit(this.base_damage)
+    }
+  }  
+}
+
+function distance_point_line(a, b, c, x, y){
+  return abs(a*x + b*y - c)/sqrt(a**2 + b**2)
+}
+
+class Enemy{
+  constructor(x, y, z, lookangle_x, lookangle_y, weapon, color, body_radius, hp){
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    this.lookangle_x = lookangle_x;
+    this.lookangle_y = lookangle_y;
+    this.weapon = weapon;
+    this.color = color;
+    this.body_radius = body_radius;
+    this.body_height = 500-this.y-this.body_radius;
+    this.hp = hp;
+    this.is_alive = true;
+  }
+
+  draw(){
+    this.weapon.draw([this.x, this.y, this.z], this.lookangle_x, 5+this.body_radius, 5+this.body_radius, 15)
+    push();
+    fill(this.color);
+    push();
+    translate(this.x, this.y, this.z)
+    sphere(this.body_radius);
+    pop();
+    push();
+    translate(this.x, 500-this.body_height/2, this.z)
+    cylinder(this.body_radius, this.body_height);
+    pop();
+    pop();
+  }
+
+  hit(damage){
+    hp -= damage;
+    if(hp <= 0){
+      this.is_alive = false;
+    }
+    console.log(`damage: ${damage}`);
+  }
 }
