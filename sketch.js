@@ -170,7 +170,10 @@ function draw_in_game_stats(){
   // display current wave and score
   fill(255);
   draw_text(15, 50, 50, `wave: ${current_wave}`);
-  draw_text(15, 100, 50, `score: ${score}`);
+  draw_text(15, 100, 50, `score: ${int(score)}`);
+  if(enemys.length <= 0){
+    draw_text(250, 350, 100, "next wave incoming...");
+  }
 
   // crosshair
   // move the drawing center, back to the center
@@ -178,6 +181,7 @@ function draw_in_game_stats(){
   fill(255);
   rect(-2, -20, 4, 40);
   rect(-20, -2, 40, 4);
+
   pop();
   drawingContext.enable(drawingContext.DEPTH_TEST);
 }
@@ -201,7 +205,7 @@ function draw_death_screen(){
   fill(200, 0, 0);
   draw_text(-300, -150, 200, 'YOU DIED');
   fill(200);
-  draw_text(-40, -100, 25, `score: ${score}`);
+  draw_text(-40, -100, 25, `score: ${int(score)}`);
   pop();
 }
 
@@ -487,14 +491,25 @@ function new_enemy_coords(){
   return [x, y, z]
 }
 
+let next_wave_time = 0;
 function manage_enemys(){
   // remove dead ones
   enemys = enemys.filter(enemy => enemy.is_alive);
-  // if empty, summon the new wave
+  // if empty, summon the new wave after a small delay
   if(enemys.length <= 0){
-    current_wave++;
-    for(let i=0, num=random(3, 30); i < num; i++){
-      enemys.push(new Enemy(...new_enemy_coords(), random(0, TWO_PI), 0, new Weapon(ak_model, 120, 120, 30, 30, 30, true), color(random(0, 255), random(0, 255), random(0, 255)), random(10, 30), random(50, 200), ceil((random(5, 20)))));
+    if(new Date().getTime() > next_wave_time + 10000){
+      next_wave_time = new Date().getTime() + 5000;
+    }
+    if(new Date().getTime() > next_wave_time){
+      current_wave++;
+      for(let i=0, num=random(5, 15)*(1+current_wave/4); i < num; i++){
+        let hp = random(10, 100);
+        let body_radius = random(10, 15)*(1+hp/100);
+        let base_damage = random(10, body_radius)
+        let reward_score = ceil(random(5, 20)) + base_damage*1.2*(hp/75);
+        let gun = new Weapon(ak_model, 120, random(5, 30), random(5, 30), 30, base_damage, 2, true, 100)
+        enemys.push(new Enemy(...new_enemy_coords(), random(0, TWO_PI), 0, gun, color(random(0, 255), random(0, 255), random(0, 255)), body_radius, hp, reward_score));
+      }
     }
   }
 }
