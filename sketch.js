@@ -7,19 +7,19 @@ let ak_model;
 let gun_reload_sound;
 let gunshot_sound;
 
-let hp = null;
-let ammo_mag = 30;
-let ammo = 120;
+// let hp = null;
+// let ammo_mag = 30;
+// let ammo = 120;
 let current_wave = 0;
-let score = 0;
+// let score = 0;
 let enemys = [];
 
-let player_x = 0;
+// let player_x = 0;
 // neg y would be pos y in unity(y is inverted, like with the normal screen drawing)
-let player_y = 450;
-let player_z = 0;
-let player_angle_x = 0;
-let player_angle_y = 0;
+// let player_y = 450;
+// let player_z = 0;
+// let player_angle_x = 0;
+// let player_angle_y = 0;
 let cam_color;
 let speed = 5;
 
@@ -31,8 +31,10 @@ function setup(){
   ammo_img.filter(INVERT);
 
   cam_color = color(255, 255, 255);
-  ak47 = new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100);
+  // ak47 = new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100);
   enemys.push(new Enemy(100, 435, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(100, 200, 255), 15, 100, 10))
+  // initiate player as enemy object, but don't render the model
+  player = new Enemy(0, 450, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(0), 15, null, 0)
 }
 
 function preload(){
@@ -48,36 +50,29 @@ function draw(){
   background(100, 200, 100);
 
   // select current draw screen mode
-  if(hp>0){
+  if(player.hp>0){
     handle_input();
     draw_3d();
     draw_in_game_stats();
-  } else if(hp == null){
+  } else if(player.hp == null){
     draw_start_screen();
   } else{
     draw_death_screen();
   }
-  // ascii code for space = 32
-  if(keyIsDown(32)){
-    if(hp>0){
-      hp--
-    }
-  }
-
 }
 
 // keyPressed, only activates the key once per press
 function keyPressed(){
   // detect if space == pressed to continue to the next screen
   if(key == " "){
-    if(hp == null){
-      hp = 100;
+    if(player.hp == null){
+      player.hp = 100;
     } else if(hp<=0){
-      hp = null;
+      player.hp = null;
     }
   }
   if(key == "r" || key == "R"){
-    ak47.reload();
+    player.weapon.reload();
   }
 }
 
@@ -91,44 +86,44 @@ function mousePressed() {
 function handle_input(){
   // w = 87
   if(keyIsDown(87)){
-    player_x += sin(player_angle_x) * speed;
-    player_z -= cos(player_angle_x) * speed;
+    player.x += sin(player.lookangle_x) * speed;
+    player.z -= cos(player.lookangle_x) * speed;
   }
   // s = 83
   if(keyIsDown(83)){
-    player_x -= sin(player_angle_x) * speed;
-    player_z += cos(player_angle_x) * speed;
+    player.x -= sin(player.lookangle_x) * speed;
+    player.z += cos(player.lookangle_x) * speed;
   }
   // a = 65
   if(keyIsDown(65)){
-    player_x -= cos(player_angle_x) * speed;
-    player_z -= sin(player_angle_x) * speed;
+    player.x -= cos(player.lookangle_x) * speed;
+    player.z -= sin(player.lookangle_x) * speed;
   }
   // d = 86
   if(keyIsDown(68)){
-    player_x += cos(player_angle_x) * speed;
-    player_z += sin(player_angle_x) * speed;
+    player.x += cos(player.lookangle_x) * speed;
+    player.z += sin(player.lookangle_x) * speed;
   }
   // check player press LMB
   if(mouseIsPressed && mouseButton === LEFT){
-    if(ak47.check_allowed_fire()){
-      ak47.shoot_scan(player_angle_x, player_angle_y, [player_x, player_y, player_z], enemys);
+    if(player.weapon.check_allowed_fire()){
+      player.weapon.shoot_scan(player.lookangle_x, player.lookangle_y, [player.x, player.y, player.z], enemys);
     }
   }
 
-  player_angle_x += movedX * 0.05;
-  player_angle_y += movedY * 0.05;
-  player_angle_y = constrain(player_angle_y, -1.5, 1.5);
+  player.lookangle_x += movedX * 0.05;
+  player.lookangle_y += movedY * 0.05;
+  player.lookangle_y = constrain(player.lookangle_y, -1.5, 1.5);
 
-  if(player_x > 490){
-    player_x = 490;
-  } else if(player_x < -490){
-    player_x = -490;
+  if(player.x > 490){
+    player.x = 490;
+  } else if(player.x < -490){
+    player.x = -490;
   }
-  if(player_z > 490){
-    player_z = 490;
-  } else if(player_z < -490){
-    player_z = -490;
+  if(player.z > 490){
+    player.z = 490;
+  } else if(player.z < -490){
+    player.z = -490;
   }
   // console.log(player_x, player_y, player_z);
 }
@@ -152,7 +147,7 @@ function draw_in_game_stats(){
 
   // ammo counter
   fill(255);
-  draw_text(1070, 50, 50, `${ak47.current_mag_ammo}/${ak47.current_ammo}`);
+  draw_text(1070, 50, 50, `${player.weapon.current_mag_ammo}/${player.weapon.current_ammo}`);
   draw_img(ammo_img, 1220, 0);
 
   // health bar
@@ -162,15 +157,15 @@ function draw_in_game_stats(){
   fill(200, 0, 0);
   rect(1072, 67, 196, 36);
   fill(0, 200, 0);
-  rect(1072, 67, hp/100*196, 36);
+  rect(1072, 67, player.hp/100*196, 36);
 
   fill(0);
-  draw_text(1130, 95, 25, `${hp}/100 hp`);
+  draw_text(1130, 95, 25, `${player.hp}/100 hp`);
 
   // display current wave and score
   fill(255);
   draw_text(15, 50, 50, `wave: ${current_wave}`);
-  draw_text(15, 100, 50, `score: ${int(score)}`);
+  draw_text(15, 100, 50, `score: ${int(player.score)}`);
   if(enemys.length <= 0){
     draw_text(250, 350, 100, "next wave incoming...");
   }
@@ -205,21 +200,21 @@ function draw_death_screen(){
   fill(200, 0, 0);
   draw_text(-300, -150, 200, 'YOU DIED');
   fill(200);
-  draw_text(-40, -100, 25, `score: ${int(score)}`);
+  draw_text(-40, -100, 25, `score: ${int(player.score)}`);
   pop();
 }
 
 function draw_3d(){
-  let look_x = player_x + sin(player_angle_x) * 100;
-  let look_y = player_y + sin(player_angle_y) * 100;
-  let look_z = player_z - cos(player_angle_x) * 100;
-  camera(player_x, player_y, player_z, look_x, look_y, look_z, 0, 1, 0);
+  let look_x = player.x + sin(player.lookangle_x) * 100;
+  let look_y = player.y + sin(player.lookangle_y) * 100;
+  let look_z = player.z - cos(player.lookangle_x) * 100;
+  camera(player.x, player.y, player.z, look_x, look_y, look_z, 0, 1, 0);
 
   // stop the cam clipping
   perspective(PI / 3.0, w / h, 1, 10000);
   
   ambientLight(100);
-  pointLight(cam_color, player_x, player_y, player_z);
+  pointLight(cam_color, player.x, player.y, player.z);
 
   noStroke();
   
@@ -265,7 +260,7 @@ function draw_3d(){
   plane(1000, 1000);
   pop();
 
-  ak47.draw([player_x, player_y, player_z], player_angle_x);
+  player.weapon.draw([player.x, player.y, player.z], player.lookangle_x);
   manage_enemys();
   for(let enemy of enemys){
     enemy.draw();
@@ -465,7 +460,7 @@ class Enemy{
     this.hp -= damage;
     if(this.hp <= 0){
       this.is_alive = false;
-      score += this.score
+      player.score += this.score
       console.log("dead");
     }
     console.log(`damage: ${damage}, ${this.hp}`);
@@ -484,7 +479,7 @@ function new_enemy_coords(){
   let x = random(-499, 499)
   let y = random(375, 450)
   let z = random(-499, 499)
-  if(get_dist_pyth([player_x, player_y, player_z], [x, y, z]) < 100){
+  if(get_dist_pyth([player.x, player.y, player.z], [x, y, z]) < 100){
     // use recursion, to solve the situation, where the enemy is too close to the player
     return new_enemy_coords()
   }
