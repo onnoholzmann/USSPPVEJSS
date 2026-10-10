@@ -32,7 +32,7 @@ function setup(){
 
   cam_color = color(255, 255, 255);
   // ak47 = new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100);
-  enemys.push(new Enemy(100, 435, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(100, 200, 255), 15, 100, 10))
+  enemys.push(new Enemy(100, 435, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(100, 200, 255), 15, 100, 10, 2))
   // initiate player as enemy object, but don't render the model
   player = new Enemy(0, 450, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(0), 15, null, 0)
 }
@@ -67,7 +67,7 @@ function keyPressed(){
   if(key == " "){
     if(player.hp == null){
       player.hp = 100;
-    } else if(hp<=0){
+    } else if(player.hp<=0){
       player.hp = null;
     }
   }
@@ -263,6 +263,7 @@ function draw_3d(){
   player.weapon.draw([player.x, player.y, player.z], player.lookangle_x);
   manage_enemys();
   for(let enemy of enemys){
+    enemy.move();
     enemy.draw();
   }
 
@@ -426,7 +427,7 @@ function distance_point_line(a, b, c, x, y){
 }
 
 class Enemy{
-  constructor(x, y, z, lookangle_x, lookangle_y, weapon, color, body_radius, hp, reward_score){
+  constructor(x, y, z, lookangle_x, lookangle_y, weapon, color, body_radius, hp, reward_score, speed){
     this.x = x;
     this.y = y;
     this.z = z;
@@ -439,6 +440,11 @@ class Enemy{
     this.hp = hp;
     this.is_alive = true;
     this.score = reward_score;
+    this.goal_pos = this.new_goal_pos();
+    this.speed = speed;
+    this.fleeing = false;
+    this.speed_modifier = 1;
+    this.flee_cooldown = 0;
   }
 
   draw(){
@@ -446,11 +452,11 @@ class Enemy{
     push();
     fill(this.color);
     push();
-    translate(this.x, this.y, this.z)
+    translate(this.x, this.y, this.z);
     sphere(this.body_radius);
     pop();
     push();
-    translate(this.x, 500-this.body_height/2, this.z)
+    translate(this.x, 500-this.body_height/2, this.z);
     cylinder(this.body_radius, this.body_height);
     pop();
     pop();
@@ -460,19 +466,88 @@ class Enemy{
     this.hp -= damage;
     if(this.hp <= 0){
       this.is_alive = false;
-      player.score += this.score
+      player.score += this.score;
       console.log("dead");
     }
     console.log(`damage: ${damage}, ${this.hp}`);
   }
+
+  new_goal_pos(){
+    // let dist = get_dist_pyth([this.x, this.y, this.z], [player.x, player.y, player.z]);
+    if(this.fleeing){
+      this.fleeing = false;
+      this.speed_modifier = 1;
+      this.flee_cooldown = 30;
+    }
+    
+    let dx = (random(0, 50)+50)*Math.sign(random(-1, 1));
+    // let y = random(375, 450)
+    let dz = (random(0, 50)+50)*Math.sign(random(-1, 1));
+
+    let target_x = this.x + dx;
+    let target_z = this.z + dz;
+    // move the target if it's unreachable, to prevent buggy/yittery movement near the wall
+    if (target_x >= 490) target_x = 490 - random(60, 100);
+    else if (target_x <= -490) target_x = -490 + random(60, 100);
+    else target_x = constrain(target_x, -490, 490);
+    
+    if (target_z >= 490) target_z = 490 - random(60, 100);
+    else if (target_z <= -490) target_z = -490 + random(60, 100);
+    else target_z = constrain(target_z, -490, 490);
+
+    // return [constrain(, -490, 490), this.y, constrain(, -490, 490)];
+    return [target_x, this.y, target_z]
+  }
+
+  move(){
+    let dist = get_dist_pyth([this.x, this.y, this.z], this.goal_pos);
+    if(dist < this.speed*1.5){
+      this.goal_pos = this.new_goal_pos();
+    }
+    let player_dist = get_dist_pyth([this.x, this.y, this.z], [player.x, player.y, player.z]);
+    if(player_dist < 75 && !this.fleeing){
+      if(this.flee_cooldown <= 0){
+        // let dx = this.x - player.x;
+        // let dz = this.z - player.z;
+        let player_delta_vector = [this.x - player.x, 0, this.z - player.z];
+        let fleeing_direction = normalize_vector(player_delta_vector);
+        let target_x = this.x + fleeing_direction[0]*150;
+        let target_z = this.z + fleeing_direction[2]*150;
+        if (target_x >= 490) target_x = 490 - random(60, 100);
+        else if (target_x <= -490) target_x = -490 + random(60, 100);
+        
+        if (target_z >= 490) target_z = 490 - random(60, 100);
+        else if (target_z <= -490) target_z = -490 + random(60, 100);
+
+        // this.goal_pos = [constrain(this.x + dx*3, -490, 490), this.y, constrain(this.z + dz*3, -490, 490)];
+        this.goal_pos = [target_x, this.y, target_z]
+        this.speed_modifier = 4;
+        this.fleeing = true;
+      }
+    }
+    let delta_vector = [this.goal_pos[0] - this.x, 0, this.goal_pos[2] - this.z];
+    let movement_direction_vector =  normalize_vector(delta_vector);
+    this.x += movement_direction_vector[0]*this.speed*this.speed_modifier;
+    this.z += movement_direction_vector[2]*this.speed*this.speed_modifier;
+    this.flee_cooldown--;
+  }
+}
+
+function normalize_vector(vector){
+  let vector_magnitude = get_dist_pyth(vector, [0, 0, 0]);
+  let normalized_vector = []
+  for(let i=0; i < vector.length; i++){
+    normalized_vector[i] = vector[i]/vector_magnitude;
+  }
+  return normalized_vector;
 }
 
 function get_dist_pyth(p1, p2){
-  sum = 0;
+  let sum = 0;
   for(let i=0; i < p1.length; i++){
-    sum += (p1[i] - p2[i])**2
+    sum += (p1[i] - p2[i])**2;
   }
-  return sqrt(sum)
+  return sqrt(sum);
 }
 
 function new_enemy_coords(){
@@ -503,7 +578,8 @@ function manage_enemys(){
         let base_damage = random(10, body_radius)
         let reward_score = ceil(random(5, 20)) + base_damage*1.2*(hp/75);
         let gun = new Weapon(ak_model, 120, random(5, 30), random(5, 30), 30, base_damage, 2, true, 100)
-        enemys.push(new Enemy(...new_enemy_coords(), random(0, TWO_PI), 0, gun, color(random(0, 255), random(0, 255), random(0, 255)), body_radius, hp, reward_score));
+        let movement_speed = random(2, 5)*(15/body_radius);
+        enemys.push(new Enemy(...new_enemy_coords(), random(0, TWO_PI), 0, gun, color(random(0, 255), random(0, 255), random(0, 255)), body_radius, hp, reward_score, movement_speed));
       }
     }
   }
