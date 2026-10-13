@@ -5,7 +5,10 @@ let gameFont;
 let ammo_img;
 let ak_model;
 let gun_reload_sound;
-let gunshot_sound;
+// let gunshot_sound;
+// make sure, multiple shots can get their sounds rendered at once
+let gunshot_sounds = []; 
+let gunshot_pool_index = 0; 
 
 // let hp = null;
 // let ammo_mag = 30;
@@ -42,7 +45,10 @@ function preload(){
   gameFont = loadFont('EvilEmpire-lx5R0.ttf');
   ak_model = loadModel('ak47.stl');
   gun_reload_sound = loadSound('gun-reload.mp3');
-  gunshot_sound = loadSound('submachine-gun.mp3');
+  // gunshot_sound = loadSound('submachine-gun.mp3');
+  for(let i = 0; i < 8; i++) {
+    gunshot_sounds.push(loadSound('submachine-gun.mp3'));
+  }
 }
 
 function draw(){
@@ -160,7 +166,7 @@ function draw_in_game_stats(){
   rect(1072, 67, player.hp/100*196, 36);
 
   fill(0);
-  draw_text(1130, 95, 25, `${player.hp}/100 hp`);
+  draw_text(1130, 95, 25, `${int(player.hp)}/100 hp`);
 
   // display current wave and score
   fill(255);
@@ -265,6 +271,7 @@ function draw_3d(){
   for(let enemy of enemys){
     enemy.move();
     enemy.draw();
+    enemy.attempt_shot();
   }
 
   /*
@@ -363,7 +370,13 @@ class Weapon{
   shoot_scan(shootangle_x, shootangle_y, bullet_origin, collide_check_list){
     this.current_mag_ammo--;
     this.last_fire = Date.now();
-    gunshot_sound.play();
+    let ds_player = get_dist_pyth(bullet_origin, [player.x, player.y, player.z]);
+    let amp = 1 - 0.95 * constrain(ds_player / 1000, 0, 1);
+    // play(startTime, rate, amplitude/volume)
+    // gunshot_sound.play(0, 1, amp);
+    console.log(`amp: ${amp}`)
+    gunshot_sounds[gunshot_pool_index].play(0, 1, amp);
+    gunshot_pool_index = (gunshot_pool_index + 1) % gunshot_sounds.length;
     // console.log("shot?")
     // vector of the direction of the shot
     let dx = sin(shootangle_x);
@@ -531,6 +544,22 @@ class Enemy{
     this.z += movement_direction_vector[2]*this.speed*this.speed_modifier;
     this.flee_cooldown--;
   }
+
+  attempt_shot(){
+    if(random(0, 100) < 1){
+      // don't forget to remove the aimbot, because that isn't fun
+      this.weapon.shoot_scan(this.lookangle_x + random(-0.25, 0.25), this.lookangle_y + random(-0.25, 0.25), [this.x, this.y, this.z], [player])
+    }
+    // make the enemy aim at the player
+    let dx = player.x - this.x;
+    let dz = player.z - this.z;
+    let target_angle_x = atan2(dx, -dz);
+    let dy = player.y - this.y;
+    let dist_xz = sqrt(dx*dx + dz*dz);
+    let target_angle_y = atan2(dy, dist_xz);
+    this.lookangle_x = target_angle_x;
+    this.lookangle_y = target_angle_y;
+  }
 }
 
 function normalize_vector(vector){
@@ -572,7 +601,7 @@ function manage_enemys(){
     }
     if(new Date().getTime() > next_wave_time){
       current_wave++;
-      for(let i=0, num=random(5, 15)*(1+current_wave/4); i < num; i++){
+      for(let i=0, num=random(3, 7)*(1+current_wave/4); i < num; i++){
         let hp = random(10, 100);
         let body_radius = random(10, 15)*(1+hp/100);
         let base_damage = random(10, body_radius)
