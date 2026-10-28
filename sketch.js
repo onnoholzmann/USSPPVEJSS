@@ -5,6 +5,13 @@ let gameFont;
 let ammo_img;
 let ak_model;
 let gun_reload_sound;
+let mag_model;
+let mag_scale_factor;
+let heart_model;
+let heart_scale_factor;
+let shoe_model;
+let shoe_scale_factor;
+let models_gpu_initialized = false;
 // let gunshot_sound;
 // make sure, multiple shots can get their sounds rendered at once
 let gunshot_sounds = []; 
@@ -16,6 +23,7 @@ let gunshot_pool_index = 0;
 let current_wave = 0;
 // let score = 0;
 let enemys = [];
+let powerups = [];
 
 // let player_x = 0;
 // neg y would be pos y in unity(y is inverted, like with the normal screen drawing)
@@ -35,15 +43,21 @@ function setup(){
 
   cam_color = color(255, 255, 255);
   // ak47 = new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100);
-  enemys.push(new Enemy(100, 435, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(100, 200, 255), 15, 100, 10, 2))
+  enemys.push(new Enemy(100, 435, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(100, 200, 255), 15, 100, 10, 2));
   // initiate player as enemy object, but don't render the model
-  player = new Enemy(0, 450, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(0), 15, null, 0)
+  player = new Enemy(0, 450, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(0), 15, null, 0);
+  mag_scale_factor = 40/get_model_dimensions(mag_model).y;
+  heart_scale_factor = 50/get_model_dimensions(heart_model).y;
+  shoe_scale_factor = 25/get_model_dimensions(shoe_model).y;
 }
 
 function preload(){
   ammo_img = loadImage("ammo.png");
   gameFont = loadFont('EvilEmpire-lx5R0.ttf');
   ak_model = loadModel('ak47.stl');
+  mag_model = loadModel('ExtendedMag.obj');
+  heart_model = loadModel('heart.obj');
+  shoe_model = loadModel('shoe.obj');
   gun_reload_sound = loadSound('gun-reload.mp3');
   // gunshot_sound = loadSound('submachine-gun.mp3');
   for(let i = 0; i < 8; i++) {
@@ -52,6 +66,27 @@ function preload(){
 }
 
 function draw(){
+  // make sure the models are initialized on the gpu, to prevent those absolutely massive lagspikes
+  if (!models_gpu_initialized && frameCount > 2){
+    console.log("torturing gpu");
+    push();
+    camera();
+    // move it behind the cam, so it isn't visible
+    translate(0, 0, -2000);
+    
+    ambientLight(100);
+    specularMaterial(160, 160, 160);
+    shininess(50);
+    
+    if (ak_model) model(ak_model);
+    if (mag_model) model(mag_model);
+    if (heart_model) model(heart_model);
+    if (shoe_model) model(shoe_model);
+    
+    pop();
+    models_gpu_initialized = true;
+    console.log("gpu tortured succesfully");
+  }
   // green background, so i know immediately when a wall decided to disapear
   background(100, 200, 100);
 
@@ -72,7 +107,8 @@ function keyPressed(){
   // detect if space == pressed to continue to the next screen
   if(key == " "){
     if(player.hp == null){
-      player.hp = 100;
+      player = new Enemy(0, 450, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(0), 15, 100, 0);
+      current_wave = 0;
     } else if(player.hp<=0){
       player.hp = null;
     }
@@ -92,23 +128,23 @@ function mousePressed() {
 function handle_input(){
   // w = 87
   if(keyIsDown(87)){
-    player.x += sin(player.lookangle_x) * speed;
-    player.z -= cos(player.lookangle_x) * speed;
+    player.x += sin(player.lookangle_x) * speed * player.speed_modifier;
+    player.z -= cos(player.lookangle_x) * speed * player.speed_modifier;
   }
   // s = 83
   if(keyIsDown(83)){
-    player.x -= sin(player.lookangle_x) * speed;
-    player.z += cos(player.lookangle_x) * speed;
+    player.x -= sin(player.lookangle_x) * speed * player.speed_modifier;
+    player.z += cos(player.lookangle_x) * speed * player.speed_modifier;
   }
   // a = 65
   if(keyIsDown(65)){
-    player.x -= cos(player.lookangle_x) * speed;
-    player.z -= sin(player.lookangle_x) * speed;
+    player.x -= cos(player.lookangle_x) * speed * player.speed_modifier;
+    player.z -= sin(player.lookangle_x) * speed * player.speed_modifier;
   }
   // d = 86
   if(keyIsDown(68)){
-    player.x += cos(player.lookangle_x) * speed;
-    player.z += sin(player.lookangle_x) * speed;
+    player.x += cos(player.lookangle_x) * speed * player.speed_modifier;
+    player.z += sin(player.lookangle_x) * speed * player.speed_modifier;
   }
   // check player press LMB
   if(mouseIsPressed && mouseButton === LEFT){
@@ -132,6 +168,11 @@ function handle_input(){
     player.z = -490;
   }
   // console.log(player_x, player_y, player_z);
+  
+  player.speed_modifier_remaining--;
+  if(player.speed_modifier_remaining <= 0){
+    player.speed_modifier = 1;
+  }
 }
 
 function draw_start_screen(){
@@ -273,6 +314,11 @@ function draw_3d(){
     enemy.draw();
     enemy.attempt_shot();
   }
+  powerups = powerups.filter(powerup => !powerup.collected);
+  for(let powerup of powerups){
+    powerup.draw();
+    powerup.check_collision();
+  }
 
   /*
   push()
@@ -411,7 +457,7 @@ class Weapon{
         if(dist_to_line < entity.body_radius && hit_y <= 500 && hit_y >= entity.y - entity.body_radius){
           if(!this.bullet_kill_one){
             if(headshot){
-              entity.hit(this.base_damage * this.headshot_multiplier)
+              entity.hit(this.base_damage * this.headshot_multiplier);
             } else{
               entity.hit(this.base_damage);
             }
@@ -427,9 +473,9 @@ class Weapon{
     }
     if(this.bullet_kill_one && closest_hit){
       if(closest_is_headshot){
-        closest_hit.hit(this.base_damage * this.headshot_multiplier)
+        closest_hit.hit(this.base_damage * this.headshot_multiplier);
       } else{
-        closest_hit.hit(this.base_damage)
+        closest_hit.hit(this.base_damage);
       }
     }
   }  
@@ -457,6 +503,7 @@ class Enemy{
     this.speed = speed;
     this.fleeing = false;
     this.speed_modifier = 1;
+    this.speed_modifier_remaining = Infinity;
     this.flee_cooldown = 0;
   }
 
@@ -481,6 +528,14 @@ class Enemy{
       this.is_alive = false;
       player.score += this.score;
       console.log("dead");
+      let rand_num = random(1, 10)
+      if(rand_num <= 3){
+        powerups.push(new Powerup(mag_model, this.x, 450, this.z, 100, 50, 25, 0.05, [255, 255, 10], mag_collect, mag_scale_factor));
+      } else if(rand_num <= 7){
+        powerups.push(new Powerup(heart_model, this.x, 450, this.z, 100, 50, 25, 0.05, [255, 10, 10], heart_collect, heart_scale_factor))
+      } else{
+        powerups.push(new Powerup(shoe_model, this.x, 450, this.z, 100, 50, 25, 0.05, [0, 204, 235], shoe_collect, shoe_scale_factor))
+      }
     }
     console.log(`damage: ${damage}, ${this.hp}`);
   }
@@ -562,6 +617,83 @@ class Enemy{
   }
 }
 
+class Powerup{
+  constructor(model, x, y, z, r, bobbing_period, bobbing_amp, rotation_speed, color, effect_func, scale_factor=1){
+    this.model = model;
+    // this.x, this.y, this.z = x, y, z;
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    this.r = r;
+    this.bobbing_period = bobbing_period;
+    this.bobbing_amp = bobbing_amp;
+    this.rotation_speed = rotation_speed;
+    this.color = color;
+    this.effect = effect_func;
+    this.collected = false;
+    this.scale_factor = scale_factor;
+  }
+
+  draw(){
+    push();
+    translate(this.x, this.y + this.bobbing_amp*sin(frameCount/(60*this.bobbing_period)*360), this.z);
+    scale(this.scale_factor, -this.scale_factor, this.scale_factor);
+    rotateY(frameCount*this.rotation_speed);
+    ambientMaterial(...this.color);
+    specularMaterial(255, 255, 255);
+    // normalMaterial();
+    shininess(50);
+    model(this.model);
+    pop();
+  }
+
+  check_collision(){
+    if(get_dist_pyth([player.x, player.y, player.z], [this.x, this.y, this.z]) <= this.r + player.body_radius){
+      this.effect();
+      this.collected = true;
+    }
+  }
+}
+
+function mag_collect(){
+  player.weapon.current_ammo += int(random(5, player.weapon.max_mag_ammo));
+}
+
+function heart_collect(){
+  player.hp += int(random(5, 20));
+  player.hp = min(player.hp, 100);
+}
+
+function shoe_collect(){
+  if(player.speed_modifier <= 1.1){
+    player.speed_modifier = 1.5;
+  } else{
+    player.speed_modifier *= 1.1;
+  }
+  player.speed_modifier_remaining += random(5*60, 15*60)
+}
+
+function get_model_dimensions(model) {
+  if (!model || !model.vertices || model.vertices.length === 0) {
+    return { x: 1, y: 1, z: 1 };
+  }
+  
+  let min_x = Infinity, max_x = -Infinity;
+  let min_y = Infinity, max_y = -Infinity;
+  let min_z = Infinity, max_z = -Infinity;
+  
+  for (let v of model.vertices) {
+    if (v.x < min_x) min_x = v.x;
+    if (v.x > max_x) max_x = v.x;
+    if (v.y < min_y) min_y = v.y;
+    if (v.y > max_y) max_y = v.y;
+    if (v.z < min_z) min_z = v.z;
+    if (v.z > max_z) max_z = v.z;
+  }
+  
+  return {x: max_x - min_x, y: max_y - min_y, z: max_z - min_z};
+}
+
 function normalize_vector(vector){
   let vector_magnitude = get_dist_pyth(vector, [0, 0, 0]);
   let normalized_vector = []
@@ -571,7 +703,7 @@ function normalize_vector(vector){
   return normalized_vector;
 }
 
-function get_dist_pyth(p1, p2){
+function get_dist_pyth(p1, p2=[0, 0, 0]){
   let sum = 0;
   for(let i=0; i < p1.length; i++){
     sum += (p1[i] - p2[i])**2;
