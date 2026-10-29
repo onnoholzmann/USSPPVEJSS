@@ -210,13 +210,14 @@ function mousePressed() {
           if(i != 0){
             shop_open = false;
             requestPointerLock();
+            player.weapon.last_fire = Date.now() + 500;
           }
         }
       }
     } else if(get_dist_pyth([mouseX, mouseY], [1200, 120]) < 30 && shop_click_cooldown <= 0){
       shop_open = false;
       requestPointerLock();
-      next_wave_time = new Date().getTime() + 5000;
+      player.weapon.last_fire = Date.now() + 500;
     }
     console.log(mouseX, mouseY, shop_click_cooldown)
   }
