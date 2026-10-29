@@ -3,7 +3,6 @@ const h = 720;
 
 let gameFont;
 let ammo_img;
-let ak_model;
 let gun_reload_sound;
 let mag_model;
 let mag_scale_factor;
@@ -12,6 +11,30 @@ let heart_scale_factor;
 let shoe_model;
 let shoe_scale_factor;
 let models_gpu_initialized = false;
+// shop dictates the index
+let current_weapon = 1;
+
+let shop_open = false;
+let ammo_box_img;
+let ak47_model;
+let ak47_img;
+let g18_model;
+let g18_img;
+let m4a1_model;
+let m4a1_img;
+let m82_model;
+let m82_img;
+let shop_list = [() => {player.weapon.current_ammo += player.weapon.max_mag_ammo * 3},
+                  () => {player.weapon = new Weapon(ak47_model, Infinity, 120, 30, 30, 30, 2, true, 100)},
+                  () => {player.weapon = new Weapon(g18_model, Infinity, 85, 17, 17, 20, 4, true, 10)},
+                  () => {player.weapon = new Weapon(m82_model, Infinity, 40, 10, 10, 1000, 2, false, 1000)},
+                  () => {player.weapon = new Weapon(m4a1_model, Infinity, 210, 30, 30, 60, 3, true, 70)}
+                ]
+let price_list = [30, 50, 75, 125, 200]
+let player_coins = 0;
+// prevent that you insta buy something
+let shop_click_cooldown = 0;
+
 // let gunshot_sound;
 // make sure, multiple shots can get their sounds rendered at once
 let gunshot_sounds = []; 
@@ -43,26 +66,73 @@ function setup(){
 
   cam_color = color(255, 255, 255);
   // ak47 = new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100);
-  enemys.push(new Enemy(100, 435, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(100, 200, 255), 15, 100, 10, 2));
+  enemys.push(new Enemy(100, 435, 0, 0, 0, new Weapon(ak47_model, 120, 120, 30, 30, 30, 2, true, 100), color(100, 200, 255), 15, 100, 10, 2));
   // initiate player as enemy object, but don't render the model
-  player = new Enemy(0, 450, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(0), 15, null, 0);
+  player = new Enemy(0, 450, 0, 0, 0, new Weapon(ak47_model, 120, 120, 30, 30, 30, 2, true, 100), color(0), 15, null, 0);
   mag_scale_factor = 40/get_model_dimensions(mag_model).y;
   heart_scale_factor = 50/get_model_dimensions(heart_model).y;
   shoe_scale_factor = 25/get_model_dimensions(shoe_model).y;
+
+  // ammo_box_img.resize(150, 0);
+  ammo_box_img = smart_resize(ammo_box_img, 140)
+  ak47_img = smart_resize(ak47_img, 0, 130);
+  g18_img = smart_resize(g18_img, 130);
+  m82_img = smart_resize(m82_img, 140);
+  m4a1_img = smart_resize(m4a1_img, 140);
 }
 
 function preload(){
   ammo_img = loadImage("ammo.png");
   gameFont = loadFont('EvilEmpire-lx5R0.ttf');
-  ak_model = loadModel('ak47.stl');
   mag_model = loadModel('ExtendedMag.obj');
   heart_model = loadModel('heart.obj');
   shoe_model = loadModel('shoe.obj');
   gun_reload_sound = loadSound('gun-reload.mp3');
+
+  ammo_box_img = loadImage('ammo_box.png');
+  ak47_model = loadModel('ak47.stl');
+  ak47_img = loadImage('ak-47.png');
+  g18_model = loadModel('g18.obj');
+  g18_img = loadImage('g18.png');
+  m82_model = loadModel('m82-50cal.stl');
+  m82_img = loadImage('m82_50cal.png');
+  m4a1_model = loadModel('M4A1_Carbine.stl');
+  m4a1_img = loadImage('m4a1-carabine.png');
+
   // gunshot_sound = loadSound('submachine-gun.mp3');
   for(let i = 0; i < 8; i++) {
     gunshot_sounds.push(loadSound('submachine-gun.mp3'));
   }
+}
+
+// resizes to the desired size, even if there is a section of the photo seethrough, so it doesn't fuck up your plan
+function smart_resize(img, w, h=0){
+  img.loadPixels();
+  
+  let min_x = img.width;
+  let min_y = img.height;
+  let max_x = 0;
+  let max_y = 0;
+  
+  for (let y = 0; y < img.height; y++) {
+    for (let x = 0; x < img.width; x++) {
+      let i = (x + y * img.width) * 4;
+      let alpha = img.pixels[i + 3];
+
+      if (alpha > 0) {
+        if (x < min_x) min_x = x;
+        if (y < min_y) min_y = y;
+        if (x > max_x) max_x = x;
+        if (y > max_y) max_y = y;
+      }
+    }
+  }
+  
+  let width = max_x - min_x + 1;
+  let height = max_y - min_y + 1;
+  let cropped_img = img.get(min_x, min_y, width, height);
+  cropped_img.resize(w, h);
+  return cropped_img;
 }
 
 function draw(){
@@ -78,16 +148,19 @@ function draw(){
     specularMaterial(160, 160, 160);
     shininess(50);
     
-    if (ak_model) model(ak_model);
-    if (mag_model) model(mag_model);
-    if (heart_model) model(heart_model);
-    if (shoe_model) model(shoe_model);
+    if(ak47_model) model(ak47_model);
+    if(g18_model) model(g18_model);
+    if(m82_model) model(m82_model);
+    if(m4a1_model) model(m4a1_model);
+    if(mag_model) model(mag_model);
+    if(heart_model) model(heart_model);
+    if(shoe_model) model(shoe_model);
     
     pop();
     models_gpu_initialized = true;
     console.log("gpu tortured succesfully");
   }
-  // green background, so i know immediately when a wall decided to disapear
+  // green background, so i know immediately when a wall decided to teleport into another dimension, out of nowhere
   background(100, 200, 100);
 
   // select current draw screen mode
@@ -107,8 +180,9 @@ function keyPressed(){
   // detect if space == pressed to continue to the next screen
   if(key == " "){
     if(player.hp == null){
-      player = new Enemy(0, 450, 0, 0, 0, new Weapon(ak_model, 120, 120, 30, 30, 30, 2, true, 100), color(0), 15, 100, 0);
+      player = new Enemy(0, 450, 0, 0, 0, new Weapon(ak47_model, 120, 120, 30, 30, 30, 2, true, 100), color(0), 15, 100, 0);
       current_wave = 0;
+      player_coins = 0;
     } else if(player.hp<=0){
       player.hp = null;
     }
@@ -118,14 +192,41 @@ function keyPressed(){
   }
 }
 
+// in py
+// lambda a, b: a * b
+// is hetzelfde als
+// (a, b) => a * b
+// in js
 function mousePressed() {
-  // hide the cursor
-  requestPointerLock();
+  // hide the cursor if the shop isn't opened, else, make the shop function
+  if(!shop_open){
+    requestPointerLock();
+  } else{
+    if(mouseY > 465 && mouseY < 570 && shop_click_cooldown <= 0){
+      for(let i = 0; i < 5; i++){
+        if(mouseX > 115 + 225*i && mouseX < 265 + 225*i && current_weapon != i && player_coins >= price_list[i]){
+          shop_list[i]();
+          player_coins -= price_list[i];
+          if(i != 0){
+            shop_open = false;
+            requestPointerLock();
+          }
+        }
+      }
+    } else if(get_dist_pyth([mouseX, mouseY], [1200, 120]) < 30 && shop_click_cooldown <= 0){
+      shop_open = false;
+      requestPointerLock();
+      next_wave_time = new Date().getTime() + 5000;
+    }
+    console.log(mouseX, mouseY, shop_click_cooldown)
+  }
   // ak47.shoot_scan(player_angle_x, player_angle_y, [player_x, player_y, player_z], enemys)
 }
 
 // handle_input activates while it's pressed, until it isn't anymore
 function handle_input(){
+  // make sure, you can't move or look around, while you're using the shop
+  if(shop_open) return;
   // w = 87
   if(keyIsDown(87)){
     player.x += sin(player.lookangle_x) * speed * player.speed_modifier;
@@ -148,7 +249,7 @@ function handle_input(){
   }
   // check player press LMB
   if(mouseIsPressed && mouseButton === LEFT){
-    if(player.weapon.check_allowed_fire()){
+    if(player.weapon.check_allowed_fire() && !shop_open){
       player.weapon.shoot_scan(player.lookangle_x, player.lookangle_y, [player.x, player.y, player.z], enemys);
     }
   }
@@ -212,20 +313,165 @@ function draw_in_game_stats(){
   // display current wave and score
   fill(255);
   draw_text(15, 50, 50, `wave: ${current_wave}`);
-  draw_text(15, 100, 50, `score: ${int(player.score)}`);
+  draw_text(15, 100, 50, `coins: ${player_coins}`);
+  draw_text(15, 150, 50, `score: ${int(player.score)}`);
   if(enemys.length <= 0){
     draw_text(250, 350, 100, "next wave incoming...");
   }
 
   // crosshair
+  push();
   // move the drawing center, back to the center
   translate(w/2, h/2);
   fill(255);
   rect(-2, -20, 4, 40);
   rect(-20, -2, 40, 4);
+  pop();
+  
+  if(shop_open){
+    draw_shop();
+  }
 
   pop();
   drawingContext.enable(drawingContext.DEPTH_TEST);
+}
+
+function draw_shop(){
+  if(shop_click_cooldown > 0) shop_click_cooldown--;
+  push();
+  stroke(25);
+  strokeWeight(2);
+
+  fill(100);
+  rect(65, 100, 1150, 520, 25);
+
+  // draw individual shop thingy
+  translate(-35, 0)
+  push();
+  translate(125, 125);
+  fill(22, 105, 122);
+  rect(0, 0, 200, 470, 25);
+  fill(237, 231, 227);
+  rect(25, 25, 150, 150, 10);
+  draw_img(ammo_box_img, 30, 33);
+  fill(0);
+  draw_text(25, 225, 50, "AMMO");
+  draw_text(25, 255, 25, "3 mags of ammo");
+  draw_text(25, 285, 25, "for your current");
+  draw_text(25, 315, 25, "gun");
+
+  fill(255, 49, 49);
+  rect(25, 340, 150, 105, 10);
+  fill(0);
+  draw_text(40, 400, 35, `${price_list[0]} coins`)
+  pop();
+
+  translate(225, 0);
+  push();
+  translate(125, 125);
+  fill(22, 105, 122);
+  rect(0, 0, 200, 470, 25);
+  fill(237, 231, 227);
+  rect(25, 25, 150, 150, 10);
+  draw_img(ak47_img, 40, 35);
+  fill(0);
+  draw_text(25, 225, 50, "AK-47");
+  draw_text(25, 255, 25, "firerate: MEDIUM");
+  draw_text(25, 285, 25, "magsize: 30");
+  draw_text(25, 315, 25, "ammo: 150");
+
+  fill(255, 49, 49);
+  rect(25, 340, 150, 105, 10);
+  fill(0);
+  if(current_weapon == 1){
+    draw_text(40, 400, 35, "OWNED")
+  } else{
+    draw_text(40, 400, 35, `${price_list[1]} coins`)
+  }
+  pop();
+
+  translate(225, 0);
+  push();
+  translate(125, 125);
+  fill(22, 105, 122);
+  rect(0, 0, 200, 470, 25);
+  fill(237, 231, 227);
+  rect(25, 25, 150, 150, 10);
+  draw_img(g18_img, 35, 60);
+  fill(0);
+  draw_text(25, 225, 50, "G18");
+  draw_text(25, 255, 25, "firerate: HIGH");
+  draw_text(25, 285, 25, "magsize: 17");
+  draw_text(25, 315, 25, "ammo: 102");
+
+  fill(255, 49, 49);
+  rect(25, 340, 150, 105, 10);
+  fill(0);
+  if(current_weapon == 2){
+    draw_text(40, 400, 35, "OWNED")
+  } else{
+    draw_text(40, 400, 35, `${price_list[2]} coins`)
+  }
+  pop();
+
+  translate(225, 0);
+  push();
+  translate(125, 125);
+  fill(22, 105, 122);
+  rect(0, 0, 200, 470, 25);
+  fill(237, 231, 227);
+  rect(25, 25, 150, 150, 10);
+  draw_img(m82_img, 30, 65);
+  fill(0);
+  draw_text(25, 225, 50, "M82");
+  draw_text(25, 255, 25, "firerate: LOW");
+  draw_text(25, 285, 25, "magsize: 10");
+  draw_text(25, 315, 25, "ammo: 50");
+
+  fill(255, 49, 49);
+  rect(25, 340, 150, 105, 10);
+  fill(0);
+  if(current_weapon == 3){
+    draw_text(40, 400, 35, "OWNED")
+  } else{
+    draw_text(40, 400, 35, `${price_list[3]} coins`)
+  }
+  pop();
+
+  translate(225, 0);
+  push();
+  translate(125, 125);
+  fill(22, 105, 122);
+  rect(0, 0, 200, 470, 25);
+  fill(237, 231, 227);
+  rect(25, 25, 150, 150, 10);
+  draw_img(m4a1_img, 30, 60);
+  fill(0);
+  draw_text(25, 225, 50, "M4A1");
+  draw_text(25, 255, 25, "firerate: MEDIUM");
+  draw_text(25, 285, 25, "magsize: 30");
+  draw_text(25, 315, 25, "ammo: 240");
+
+  fill(255, 49, 49);
+  rect(25, 340, 150, 105, 10);
+  fill(0);
+  if(current_weapon == 4){
+    draw_text(40, 400, 35, "OWNED")
+  } else{
+    draw_text(40, 400, 35, `${price_list[4]} coins`)
+  }
+  pop();
+
+  // exit cross in top right
+  fill(255, 49, 49);
+  translate(333, 120);
+  circle(0, 0, 25);
+  fill(255);
+  strokeWeight(3);
+  line(-(8)/sqrt(2), (8)/sqrt(2), (8)/sqrt(2), -(8)/sqrt(2));
+  line((8)/sqrt(2), (8)/sqrt(2), -(8)/sqrt(2), -(8)/sqrt(2));
+
+  pop();
 }
 
 function draw_text(x, y, size, str){
@@ -526,6 +772,7 @@ class Enemy{
     this.hp -= damage;
     if(this.hp <= 0){
       this.is_alive = false;
+      player_coins += int(random(3, 7))
       player.score += this.score;
       console.log("dead");
       let rand_num = random(1, 10)
@@ -728,7 +975,11 @@ function manage_enemys(){
   enemys = enemys.filter(enemy => enemy.is_alive);
   // if empty, summon the new wave after a small delay
   if(enemys.length <= 0){
-    if(new Date().getTime() > next_wave_time + 10000){
+    if(new Date().getTime() > next_wave_time + 10000 || shop_open == true){
+      // make sure you are able to use the shop and no new wave starts yet
+      if(!shop_open) shop_click_cooldown = 10;
+      shop_open = true;
+      exitPointerLock();
       next_wave_time = new Date().getTime() + 5000;
     }
     if(new Date().getTime() > next_wave_time){
@@ -738,7 +989,7 @@ function manage_enemys(){
         let body_radius = random(10, 15)*(1+hp/100);
         let base_damage = random(10, body_radius)
         let reward_score = ceil(random(5, 20)) + base_damage*1.2*(hp/75);
-        let gun = new Weapon(ak_model, 120, random(5, 30), random(5, 30), 30, base_damage, 2, true, 100)
+        let gun = new Weapon(ak47_model, 120, random(5, 30), random(5, 30), 30, base_damage, 2, true, 100)
         let movement_speed = random(2, 5)*(15/body_radius);
         enemys.push(new Enemy(...new_enemy_coords(), random(0, TWO_PI), 0, gun, color(random(0, 255), random(0, 255), random(0, 255)), body_radius, hp, reward_score, movement_speed));
       }
