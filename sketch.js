@@ -18,22 +18,34 @@ let shop_open = false;
 let ammo_box_img;
 let ak47_model;
 let ak47_img;
+let ak47_scale_factor;
 let g18_model;
 let g18_img;
+let g18_scale_factor;
 let m4a1_model;
 let m4a1_img;
+let m4a1_scale_factor
 let m82_model;
 let m82_img;
+let m82_scale_factor;
 let shop_list = [() => {player.weapon.current_ammo += player.weapon.max_mag_ammo * 3},
                   () => {player.weapon = new Weapon(ak47_model, Infinity, 120, 30, 30, 30, 2, true, 100)},
                   () => {player.weapon = new Weapon(g18_model, Infinity, 85, 17, 17, 20, 4, true, 10)},
                   () => {player.weapon = new Weapon(m82_model, Infinity, 40, 10, 10, 1000, 2, false, 1000)},
                   () => {player.weapon = new Weapon(m4a1_model, Infinity, 210, 30, 30, 60, 3, true, 70)}
                 ]
-let price_list = [30, 50, 75, 125, 200]
+let price_list = [30, 50, 75, 125, 200];
 let player_coins = 0;
 // prevent that you insta buy something
 let shop_click_cooldown = 0;
+let g18;
+let m82;
+let m4a1;
+// player.weapon.draw([player.x, player.y, player.z], player.lookangle_x);
+// g18.draw([0, 470, 0], 0, 0, 0, 0, g18_scale_factor, -HALF_PI);
+// m82.draw([100, 470, 0], PI, 0, 0, 0, m82_scale_factor);
+// m4a1.draw([-100, 470, 0], 0, 0, 0, 0, m4a1_scale_factor);
+let weapon_offsets;
 
 // let gunshot_sound;
 // make sure, multiple shots can get their sounds rendered at once
@@ -69,16 +81,25 @@ function setup(){
   enemys.push(new Enemy(100, 435, 0, 0, 0, new Weapon(ak47_model, 120, 120, 30, 30, 30, 2, true, 100), color(100, 200, 255), 15, 100, 10, 2));
   // initiate player as enemy object, but don't render the model
   player = new Enemy(0, 450, 0, 0, 0, new Weapon(ak47_model, 120, 120, 30, 30, 30, 2, true, 100), color(0), 15, null, 0);
-  mag_scale_factor = 40/get_model_dimensions(mag_model).y;
-  heart_scale_factor = 50/get_model_dimensions(heart_model).y;
-  shoe_scale_factor = 25/get_model_dimensions(shoe_model).y;
 
   // ammo_box_img.resize(150, 0);
   ammo_box_img = smart_resize(ammo_box_img, 140)
   ak47_img = smart_resize(ak47_img, 0, 130);
+  ak47_scale_factor = 1;
   g18_img = smart_resize(g18_img, 130);
   m82_img = smart_resize(m82_img, 140);
   m4a1_img = smart_resize(m4a1_img, 140);
+  // g18 = new Weapon(g18_model, Infinity, 85, 17, 17, 20, 4, true, 10);
+  mag_scale_factor = 40/get_model_dimensions(mag_model).y;
+  heart_scale_factor = 50/get_model_dimensions(heart_model).y;
+  shoe_scale_factor = 25/get_model_dimensions(shoe_model).y;
+  g18_scale_factor = 40/get_model_dimensions(g18_model).y
+  m82_scale_factor = 40/get_model_dimensions(m82_model).y
+  m4a1_scale_factor = 40/get_model_dimensions(m4a1_model).y
+  // m82 = new Weapon(m82_model, Infinity, 40, 10, 10, 1000, 2, false, 1000);
+  // m4a1 = new Weapon(m4a1_model, Infinity, 210, 30, 30, 60, 3, true, 70);
+  // draw(parent_coords, rotate_x, forward_dist=15, side_dist=20, height_offset=0, scale_factor=1, rotate_y=0){
+  weapon_offsets = [[0, 15, 20, 0, ak47_scale_factor, 0], [-HALF_PI, 20, 35, 15, g18_scale_factor, -HALF_PI], [HALF_PI, 30, 80, 10, m82_scale_factor, 0], [-HALF_PI, 30, 25, 15, m4a1_scale_factor, 0]];
 }
 
 function preload(){
@@ -94,7 +115,8 @@ function preload(){
   ak47_img = loadImage('ak-47.png');
   g18_model = loadModel('g18.obj');
   g18_img = loadImage('g18.png');
-  m82_model = loadModel('m82-50cal.stl');
+  // m82_model = loadModel('m82-50cal.stl');
+  m82_model = loadModel('m82_50_cal.obj');
   m82_img = loadImage('m82_50cal.png');
   m4a1_model = loadModel('M4A1_Carbine.stl');
   m4a1_img = loadImage('m4a1-carabine.png');
@@ -203,14 +225,17 @@ function mousePressed() {
     requestPointerLock();
   } else{
     if(mouseY > 465 && mouseY < 570 && shop_click_cooldown <= 0){
+      console.log("withing y")
       for(let i = 0; i < 5; i++){
         if(mouseX > 115 + 225*i && mouseX < 265 + 225*i && current_weapon != i && player_coins >= price_list[i]){
+          console.log("within x")
           shop_list[i]();
           player_coins -= price_list[i];
           if(i != 0){
             shop_open = false;
             requestPointerLock();
             player.weapon.last_fire = Date.now() + 500;
+            current_weapon = i;
           }
         }
       }
@@ -281,6 +306,12 @@ function draw_start_screen(){
   background(50);
   draw_text(-425, -150, 200, 'USSPPVEJSS');
   draw_text(-150, 300, 40, "press SPACE to start");
+  if(!models_gpu_initialized){
+    push();
+    fill(255, 150, 70);
+    draw_text(-80, 0, 50, "LOADING...");
+    pop();
+  }
 }
 
 // draws the stats + crosshair
@@ -553,8 +584,23 @@ function draw_3d(){
   fill(100);
   plane(1000, 1000);
   pop();
-
-  player.weapon.draw([player.x, player.y, player.z], player.lookangle_x);
+  // let [x_angle_offset, ...other_offsets] = weapon_offsets[current_weapon - 1];
+  // CHANGED
+  // player.weapon.draw([player.x, player.y, player.z], player.lookangle_x + x_angle_offset, ...other_offsets);
+  player.weapon.draw([player.x, player.y, player.z], player.lookangle_x, ...weapon_offsets[current_weapon - 1]);
+  // push();
+  // translate(0, 450, 0); // Player's exact starting X, Y, Z coordinates
+  // fill(255, 100, 100);  // Light red color so it stands out against the green background
+  // noStroke();
+  // cylinder(player.body_radius, player.body_height);    // Radius: 30, Height: 100
+  // pop();
+  // player.weapon.draw([0, player.y, 0], player.lookangle_x + x_angle_offset, ...other_offsets);
+  // let [x_angle_offset, forward_dist, side_dist, height_offset, scale_factor, rotate_y] = weapon_offsets[current_weapon - 1];
+  // player.weapon.draw([0, player.y, 0], player.lookangle_x + x_angle_offset, forward_dist, side_dist, height_offset, scale_factor, rotate_y);
+  // player.weapon.draw([player.x, player.y, player.z], player.lookangle_x);
+  // g18.draw([0, 470, 0], 0, 0, 0, 0, 0, g18_scale_factor, -HALF_PI);
+  // m82.draw([100, 470, 0], 0, PI, 0, 0, 0, m82_scale_factor);
+  // m4a1.draw([-100, 470, 0], 0, 0, 0, 0, 0, m4a1_scale_factor);
   manage_enemys();
   for(let enemy of enemys){
     enemy.move();
@@ -566,6 +612,7 @@ function draw_3d(){
     powerup.draw();
     powerup.check_collision();
   }
+  // console.log(5*int(frameCount/60))
 
   /*
   push()
@@ -618,7 +665,8 @@ class Weapon{
     this.last_fire = 0;
   }
 
-  draw(parent_coords, rotate_x, forward_dist=15, side_dist=20, height_offset=0){
+  draw(parent_coords, rotate_x, rotate_x_offset=0, forward_dist=15, side_dist=20, height_offset=0, scale_factor=1, rotate_y=0){
+    // if(int(get_dist_pyth(parent_coords)) == int(get_dist_pyth([0, player.y, 0]))) console.log(`scale_factor ${scale_factor}`);
     // Only draw if the 3D model has finished loading
     if (!this.model) return;
     push();
@@ -630,8 +678,10 @@ class Weapon{
     let pos_x = x + forward_dist * cos(rotate_x) + side_dist * sin(rotate_x);
     let pos_z = z + forward_dist * sin(rotate_x) - side_dist * cos(rotate_x);
     translate(pos_x, y+height_offset, pos_z);
-    rotateY(-HALF_PI - rotate_x)
-    scale(1, -1, 1);
+    // rotateY(rotate_x_offset);
+    rotateY(-HALF_PI - rotate_x + rotate_x_offset)
+    rotateX(rotate_y)
+    scale(scale_factor, -scale_factor, scale_factor);
     specularMaterial(160, 160, 160);
     // normalMaterial();
     shininess(50);
